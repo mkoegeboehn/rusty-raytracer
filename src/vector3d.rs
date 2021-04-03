@@ -1,6 +1,6 @@
 use num::Float;
 use std::convert::From;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, FnMut, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// Generic three-dimensional vector
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -84,11 +84,37 @@ impl<T> Vector3d<T> {
     {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
+
+    /// Apply a closure to ea
+    pub fn map<U, F>(self, mut f: F) -> Vector3d<U>
+    where
+        F: FnMut(T) -> U,
+    {
+        Vector3d {
+            x: f(self.x),
+            y: f(self.y),
+            z: f(self.z),
+        }
+    }
 }
 
 impl<T: Float> Vector3d<T> {
+    /// Returns the length/magnitude of the vector.
     pub fn length(&self) -> T {
         self.length_squared().sqrt()
+    }
+    /// Returns a normalized vector with length 1.
+    pub fn normalize(self) -> Self {
+        self / self.length()
+    }
+
+    pub fn project_on(&self, other: &Self) -> Self {
+        let dir = other.normalize();
+        dir * (*self * dir)
+    }
+
+    pub fn reject_from(&self, other: &Self) -> Self {
+        *self - self.project_on(other)
     }
 }
 
@@ -155,6 +181,14 @@ impl<T: Copy + Mul<Output = T>> Mul<T> for Vector3d<T> {
             y: self.y * scale,
             z: self.z * scale,
         }
+    }
+}
+
+impl<T: Copy + Add<Output = T> + Mul<Output = T>> Mul for Vector3d<T> {
+    type Output = T;
+
+    fn mul(self, rhs: Vector3d<T>) -> T {
+        self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
 }
 
