@@ -1,3 +1,5 @@
+use std::ops::Neg;
+
 use image::ImageBuffer;
 
 mod vector3d;
@@ -6,10 +8,22 @@ use vector3d::Vector3d;
 const BG_COLOR: [u8; 3] = [51, 179, 204];
 fn main() {
     const IVORY: Material = Material {
-        diffuse_color: [150, 150, 140],
+        diffuse_color: [100, 100, 75],
+        albedo: V2f {
+            x: 0.6,
+            y: 0.3,
+            z: 0.0,
+        },
+        specular_exponent: 50.0,
     };
     const RED_RUBBER: Material = Material {
-        diffuse_color: [120, 26, 26],
+        diffuse_color: [75, 26, 26],
+        albedo: V2f {
+            x: 0.9,
+            y: 0.1,
+            z: 0.0,
+        },
+        specular_exponent: 10.0,
     };
 
     let spheres = vec![
@@ -19,7 +33,11 @@ fn main() {
         Sphere::new(V3f::new(7.0, 5.0, -18.0), 4.0, IVORY),
     ];
 
-    let lights = vec![Light::new(V3f::new(-20.0, 20.0, 20.0), 1.5)];
+    let lights = vec![
+        Light::new(V3f::new(-20.0, 20.0, 20.0), 1.5),
+        Light::new(V3f::new(30.0, 50.0, -25.0), 1.8),
+        Light::new(V3f::new(30.0, 20.0, 30.0), 1.7),
+    ];
     render(&spheres, &lights);
 }
 
@@ -64,19 +82,30 @@ fn scene_intersect<'a>(
 fn cast_ray(origin: &V3f, dir: &V3f, spheres: &[Sphere], lights: &[Light]) -> image::Rgb<u8> {
     if let Some((point, sphere)) = scene_intersect(origin, dir, spheres) {
         let mut diffuse_light_intensity = 0.0;
+        let mut specular_light_intensity = 0.0;
         for light in lights {
             let light_dir = (light.position - point).normalize();
             let normal_vector = sphere.norm(&point);
             diffuse_light_intensity += light.intensity * (light_dir * normal_vector).max(0.0);
+            specular_light_intensity += (-reflect(&-light_dir, &normal_vector) * *dir)
+                .max(0.0)
+                .powf(sphere.material.specular_exponent)
+                * light.intensity;
         }
         let mut pixel = sphere.material.diffuse_color;
         for subpixel in pixel.iter_mut() {
-            *subpixel = (*subpixel as f64 * diffuse_light_intensity) as u8;
+            *subpixel = (*subpixel as f64 * diffuse_light_intensity * sphere.material.albedo.x
+                + 255.0 * specular_light_intensity * sphere.material.albedo.y)
+                as u8;
         }
         image::Rgb(pixel)
     } else {
         image::Rgb(BG_COLOR)
     }
+}
+
+fn reflect(incident: &V3f, normal: &V3f) -> V3f {
+    *incident - *normal * (2.0 * (*incident * *normal))
 }
 
 type V3f = Vector3d<f64>;
@@ -132,14 +161,21 @@ impl Sphere {
     }
 }
 
+type V2f = Vector3d<f64>;
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 struct Material {
     diffuse_color: [u8; 3],
+    albedo: V2f,
+    specular_exponent: f64,
 }
 
 impl Material {
-    fn new(diffuse_color: [u8; 3]) -> Self {
-        Self { diffuse_color }
+    fn new(diffuse_color: [u8; 3], albedo: V2f, specular_exponent: f64) -> Self {
+        Self {
+            diffuse_color,
+            albedo,
+            specular_exponent,
+        }
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
