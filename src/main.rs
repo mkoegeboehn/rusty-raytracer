@@ -26,9 +26,29 @@ fn main() {
         specular_exponent: 10.0,
     };
 
+    const BLACK_RUBBER: Material = Material {
+        diffuse_color: [10, 10, 10],
+        albedo: V2f {
+            x: 0.6,
+            y: 0.1,
+            z: 0.0,
+        },
+        specular_exponent: 10.0,
+    };
+
+    const STEEL: Material = Material {
+        diffuse_color: [20, 20, 25],
+        albedo: V2f {
+            x: 3.0,
+            y: 0.6,
+            z: 0.0,
+        },
+        specular_exponent: 100.0,
+    };
+
     let spheres = vec![
-        Sphere::new(V3f::new(-3.0, 0.0, -16.0), 2.0, IVORY),
-        Sphere::new(V3f::new(-1.0, -1.5, -12.0), 2.0, RED_RUBBER),
+        Sphere::new(V3f::new(-3.0, 0.0, -16.0), 2.0, BLACK_RUBBER),
+        Sphere::new(V3f::new(-1.0, -1.5, -12.0), 2.0, STEEL),
         Sphere::new(V3f::new(1.5, -0.5, -18.0), 3.0, RED_RUBBER),
         Sphere::new(V3f::new(7.0, 5.0, -18.0), 4.0, IVORY),
     ];
@@ -84,8 +104,20 @@ fn cast_ray(origin: &V3f, dir: &V3f, spheres: &[Sphere], lights: &[Light]) -> im
         let mut diffuse_light_intensity = 0.0;
         let mut specular_light_intensity = 0.0;
         for light in lights {
-            let light_dir = (light.position - point).normalize();
+            let light_dir = light.position - point;
+            let light_distance = light_dir.length();
+            let light_dir = light_dir / light_distance;
             let normal_vector = sphere.norm(&point);
+            let shadow_orig = if light_dir * normal_vector < 0.0 {
+                point - normal_vector * 1e-8
+            } else {
+                point + normal_vector * 1e-8
+            };
+            if let Some((shadow_point, _)) = scene_intersect(&shadow_orig, &light_dir, spheres) {
+                if (shadow_point - shadow_orig).length() < light_distance {
+                    continue;
+                }
+            }
             diffuse_light_intensity += light.intensity * (light_dir * normal_vector).max(0.0);
             specular_light_intensity += (-reflect(&-light_dir, &normal_vector) * *dir)
                 .max(0.0)
