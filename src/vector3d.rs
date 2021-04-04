@@ -105,7 +105,12 @@ impl<T: Float> Vector3d<T> {
     }
     /// Returns a normalized vector with length 1.
     pub fn normalize(self) -> Self {
-        self / self.length()
+        let l = self.length();
+        if l.is_normal() {
+            self / l
+        } else {
+            self
+        }
     }
 
     pub fn project_on(&self, other: &Self) -> Self {

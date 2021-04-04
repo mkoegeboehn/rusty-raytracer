@@ -1,56 +1,19 @@
-use std::ops::Neg;
-
 use image::ImageBuffer;
 
 mod vector3d;
 use vector3d::Vector3d;
+mod material;
+use material::Material;
+mod light;
+use light::Light;
 
 const BG_COLOR: [u8; 3] = [51, 179, 204];
 fn main() {
-    const IVORY: Material = Material {
-        diffuse_color: [100, 100, 75],
-        albedo: V2f {
-            x: 0.6,
-            y: 0.3,
-            z: 0.0,
-        },
-        specular_exponent: 50.0,
-    };
-    const RED_RUBBER: Material = Material {
-        diffuse_color: [75, 26, 26],
-        albedo: V2f {
-            x: 0.9,
-            y: 0.1,
-            z: 0.0,
-        },
-        specular_exponent: 10.0,
-    };
-
-    const BLACK_RUBBER: Material = Material {
-        diffuse_color: [10, 10, 10],
-        albedo: V2f {
-            x: 0.6,
-            y: 0.1,
-            z: 0.0,
-        },
-        specular_exponent: 10.0,
-    };
-
-    const STEEL: Material = Material {
-        diffuse_color: [20, 20, 25],
-        albedo: V2f {
-            x: 3.0,
-            y: 0.6,
-            z: 0.0,
-        },
-        specular_exponent: 100.0,
-    };
-
     let spheres = vec![
-        Sphere::new(V3f::new(-3.0, 0.0, -16.0), 2.0, BLACK_RUBBER),
-        Sphere::new(V3f::new(-1.0, -1.5, -12.0), 2.0, STEEL),
-        Sphere::new(V3f::new(1.5, -0.5, -18.0), 3.0, RED_RUBBER),
-        Sphere::new(V3f::new(7.0, 5.0, -18.0), 4.0, IVORY),
+        Sphere::new(V3f::new(-3.0, 0.0, -16.0), 2.0, Material::IVORY),
+        Sphere::new(V3f::new(-1.0, -1.5, -12.0), 2.0, Material::GLASS),
+        Sphere::new(V3f::new(1.5, -0.5, -18.0), 3.0, Material::RED_RUBBER),
+        Sphere::new(V3f::new(7.0, 5.0, -18.0), 4.0, Material::MIRROR),
     ];
 
     let lights = vec![
@@ -64,17 +27,16 @@ fn main() {
 fn render(spheres: &[Sphere], lights: &[Light]) {
     const WIDTH: u32 = 1024;
     const HEIGHT: u32 = 768;
-    // const FOV: f64 = std::f64::consts::FRAC_PI_2;
+    // const FOV: f64 = std::f64::consts::FRAC_PI_3;
     const FOV: f64 = 1.0;
     let mut imgbuf = ImageBuffer::new(WIDTH, HEIGHT);
 
     for (i, j, pixel) in imgbuf.enumerate_pixels_mut() {
-        let x: f64 =
-            (2.0 * (i as f64 + 0.5) / (WIDTH as f64) - 1.0) * f64::tan(FOV / 2.0) * (WIDTH as f64)
-                / (HEIGHT as f64);
-        let y: f64 = -(2.0 * (j as f64 + 0.5) / (HEIGHT as f64) - 1.0) * f64::tan(FOV / 2.0);
-        let dir = V3f::new(x, y, -1.0).normalize();
-        *pixel = cast_ray(&V3f::with_value(0.0), &dir, spheres, lights);
+        let dir_x: f64 = (i as f64 + 0.5) - WIDTH as f64 / 2.0;
+        let dir_y: f64 = -(j as f64 + 0.5) + HEIGHT as f64 / 2.0;
+        let dir_z: f64 = -(HEIGHT as f64) / (2.0 * (FOV / 2.0).tan());
+        let dir = V3f::new(dir_x, dir_y, dir_z).normalize();
+        *pixel = cast_ray(&V3f::with_value(0.0), &dir, spheres, lights, 4);
     }
 
     imgbuf.save("renders/out.png").unwrap();
@@ -99,19 +61,60 @@ fn scene_intersect<'a>(
     result
 }
 
-fn cast_ray(origin: &V3f, dir: &V3f, spheres: &[Sphere], lights: &[Light]) -> image::Rgb<u8> {
-    if let Some((point, sphere)) = scene_intersect(origin, dir, spheres) {
+fn cast_ray(
+    origin: &V3f,
+    dir: &V3f,
+    spheres: &[Sphere],
+    lights: &[Light],
+    recursion_depth: i32,
+) -> image::Rgb<u8> {
+    const PERTURB: f64 = 1e-3;
+    if recursion_depth < 0 {
+        image::Rgb(BG_COLOR)
+    } else if let Some((point, sphere)) = scene_intersect(origin, dir, spheres) {
+        let normal_vector = sphere.norm(&point);
+        let reflect_dir = reflect(dir, &normal_vector).normalize();
+        let refract_dir = refract(
+            &dir.normalize(),
+            &normal_vector,
+            sphere.material.refractive_index,
+        )
+        .normalize();
+        let reflect_orig = if reflect_dir * normal_vector < 0.0 {
+            point - normal_vector * PERTURB
+        } else {
+            point + normal_vector * PERTURB
+        };
+        let refract_orig = if refract_dir * normal_vector < 0.0 {
+            point - normal_vector * PERTURB
+        } else {
+            point + normal_vector * PERTURB
+        };
+        let reflect_color = cast_ray(
+            &reflect_orig,
+            &reflect_dir,
+            spheres,
+            lights,
+            recursion_depth - 1,
+        );
+        let refract_color = cast_ray(
+            &refract_orig,
+            &refract_dir,
+            spheres,
+            lights,
+            recursion_depth - 1,
+        );
+
         let mut diffuse_light_intensity = 0.0;
         let mut specular_light_intensity = 0.0;
         for light in lights {
             let light_dir = light.position - point;
             let light_distance = light_dir.length();
             let light_dir = light_dir / light_distance;
-            let normal_vector = sphere.norm(&point);
             let shadow_orig = if light_dir * normal_vector < 0.0 {
-                point - normal_vector * 1e-8
+                point - normal_vector * PERTURB
             } else {
-                point + normal_vector * 1e-8
+                point + normal_vector * PERTURB
             };
             if let Some((shadow_point, _)) = scene_intersect(&shadow_orig, &light_dir, spheres) {
                 if (shadow_point - shadow_orig).length() < light_distance {
@@ -125,9 +128,11 @@ fn cast_ray(origin: &V3f, dir: &V3f, spheres: &[Sphere], lights: &[Light]) -> im
                 * light.intensity;
         }
         let mut pixel = sphere.material.diffuse_color;
-        for subpixel in pixel.iter_mut() {
-            *subpixel = (*subpixel as f64 * diffuse_light_intensity * sphere.material.albedo.x
-                + 255.0 * specular_light_intensity * sphere.material.albedo.y)
+        for (i, subpixel) in pixel.iter_mut().enumerate() {
+            *subpixel = (*subpixel as f64 * diffuse_light_intensity * sphere.material.albedo[0]
+                + 255.0 * specular_light_intensity * sphere.material.albedo[1]
+                + reflect_color[i] as f64 * sphere.material.albedo[2]
+                + refract_color[i] as f64 * sphere.material.albedo[3])
                 as u8;
         }
         image::Rgb(pixel)
@@ -138,6 +143,27 @@ fn cast_ray(origin: &V3f, dir: &V3f, spheres: &[Sphere], lights: &[Light]) -> im
 
 fn reflect(incident: &V3f, normal: &V3f) -> V3f {
     *incident - *normal * (2.0 * (*incident * *normal))
+}
+
+fn refract(incident: &V3f, normal: &V3f, refractive_index: f64) -> V3f {
+    let inc = incident.normalize();
+    let mut n = normal.normalize();
+    let mut cos_i = -inc * n;
+    let mut eta_i = 1.0;
+    let mut eta_t = refractive_index;
+
+    if cos_i < 0.0 {
+        cos_i = -cos_i;
+        std::mem::swap(&mut eta_i, &mut eta_t);
+        n = -n;
+    }
+    let eta = eta_i / eta_t;
+    let k = 1.0 - (eta * eta * (1.0 - (cos_i * cos_i)));
+    if k < 0.0 {
+        V3f::with_value(0.0)
+    } else {
+        (inc * eta) + (n * (eta * cos_i - k.sqrt()))
+    }
 }
 
 type V3f = Vector3d<f64>;
@@ -190,37 +216,5 @@ impl Sphere {
 
     fn norm(&self, point: &V3f) -> V3f {
         (*point - self.center).normalize()
-    }
-}
-
-type V2f = Vector3d<f64>;
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-struct Material {
-    diffuse_color: [u8; 3],
-    albedo: V2f,
-    specular_exponent: f64,
-}
-
-impl Material {
-    fn new(diffuse_color: [u8; 3], albedo: V2f, specular_exponent: f64) -> Self {
-        Self {
-            diffuse_color,
-            albedo,
-            specular_exponent,
-        }
-    }
-}
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Light {
-    position: V3f,
-    intensity: f64,
-}
-
-impl Light {
-    fn new(position: V3f, intensity: f64) -> Self {
-        Self {
-            position,
-            intensity,
-        }
     }
 }
