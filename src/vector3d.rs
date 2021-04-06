@@ -1,4 +1,4 @@
-use num::Float;
+use num_traits::Float;
 use std::convert::From;
 use std::ops::{Add, AddAssign, Div, DivAssign, FnMut, Mul, MulAssign, Neg, Sub, SubAssign};
 
