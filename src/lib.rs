@@ -2,12 +2,11 @@ use image::ImageBuffer;
 
 mod vector3d;
 use vector3d::Vector3d;
-pub mod material;
-use material::Material;
 pub mod light;
+pub mod material;
 use light::Light;
 pub mod entity;
-use entity::{Entity, Intersect, Matter, NormalVector, Sphere};
+use entity::{Entity, Intersect, Matter, NormalVector};
 
 pub type V3f = Vector3d<f64>;
 

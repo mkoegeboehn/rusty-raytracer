@@ -56,7 +56,7 @@ impl<T> Vector3d<T> {
         self.x * rhs.x + self.y * rhs.y + self.z * rhs.z
     }
 
-    /// Takes the dot product of two vectors.
+    /// Takes the cross product of two vectors.
     ///
     /// # Examples
     ///
@@ -76,6 +76,20 @@ impl<T> Vector3d<T> {
             y: self.z * rhs.x - self.x * rhs.z,
             z: self.x * rhs.y - self.y * rhs.x,
         }
+    }
+    /// Takes the scalar triple product of two vectors.
+    pub fn scalar_triple_prod(self, v1: Vector3d<T>, v2: Vector3d<T>) -> T
+    where
+        T: Copy + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    {
+        self.dot(v1.cross(v2))
+    }
+    /// Takes the vector triple product of two vectors.
+    pub fn vector_triple_prod(self, v1: Vector3d<T>, v2: Vector3d<T>) -> Vector3d<T>
+    where
+        T: Copy + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
+    {
+        self.cross(v1.cross(v2))
     }
     /// Returns the length/magnitude of the vector squared.
     pub fn length_squared(&self) -> T

@@ -1,4 +1,3 @@
-use crate::vector3d::Vector3d;
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Material {
     pub diffuse_color: [u8; 3],

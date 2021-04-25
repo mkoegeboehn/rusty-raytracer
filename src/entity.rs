@@ -33,8 +33,10 @@ impl Triangle {
 }
 
 impl NormalVector for Triangle {
-    fn norm(&self, point: &V3f) -> V3f {
-        (self.vertices[1] - self.vertices[0]).cross(self.vertices[2] - self.vertices[1])
+    fn norm(&self, _: &V3f) -> V3f {
+        (self.vertices[1] - self.vertices[0])
+            .cross(self.vertices[2] - self.vertices[1])
+            .normalize()
     }
 }
 
